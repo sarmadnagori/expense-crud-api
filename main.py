@@ -1,6 +1,33 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-import sqlite3
+import psycopg2
+import os
+from dotenv import load_dotenv
+
+load_dotenv()      # reads the .env file into the environment
+
+# now read each value
+DB_NAME = os.getenv("DB_NAME")
+DB_USER = os.getenv("DB_USER")
+DB_HOST = os.getenv("DB_HOST")
+
+
+
+
+conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS expenses (
+    id SERIAL PRIMARY KEY,
+    description TEXT,
+    amount INTEGER
+)
+""")
+
+conn.commit()
+conn.close()
+
 
 
 
@@ -9,33 +36,20 @@ app = FastAPI()
 class Expense(BaseModel):
     description:str
     amount:int
+    id:int|None=None
+
+   
+
+class ExpenseUpdate(BaseModel):    # for UPDATING — needs id
+    id: int
+    amount: int
 
 
-
-
-
-# --- create the table once , when the app starts--
-
-
-conn = sqlite3.connect("expenses.db")
-conn.execute("""
-CREATE TABLE IF NOT EXISTS expenses (
-    id INTEGER PRIMARY KEY,
-    description TEXT,
-    amount INTEGER 
-
-)
-
-""") 
-
-
-conn.commit()
-conn.close()
 
 @app.get ("/expenses")
 def get_expenses():
 
-    conn= sqlite3.connect("expenses.db")
+    conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM expenses")
     
@@ -51,10 +65,10 @@ def get_expenses():
 
 @app.post("/expenses")
 def add_expense(expense: Expense):
-    conn = sqlite3.connect("expenses.db")
+    conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO expenses (description, amount) VALUES (?, ?)",
+        "INSERT INTO expenses (description, amount) VALUES (%s, %s)",
         (expense.description, expense.amount)
     )
     conn.commit()      # save the INSERT
@@ -63,19 +77,20 @@ def add_expense(expense: Expense):
 
 @app.put("/expenses")
 
-def update_expenses(expense:Expense):
-    conn = sqlite3.connect("expenses.db")
+def update_expenses(expense:ExpenseUpdate):
+    conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor= conn.cursor()
-    cursor.execute("UPDATE expenses SET amount=? WHERE description=? ",(expense.amount,expense.description))
+    cursor.execute("UPDATE expenses SET amount=%s WHERE id=%s ",(expense.amount,expense.id))
     conn.commit()
     conn.close()
     return {"message":"updated expenses"}
 
 @app.delete("/expenses")
-def del_expenses(expense:Expense):
-    conn=sqlite3.connect("expenses.db")
+def del_expenses(expense:ExpenseUpdate):
+    conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor=conn.cursor()
-    cursor.execute("DELETE FROM expenses WHERE description=?",(expense.description,))
+    cursor.execute("DELETE FROM expenses WHERE id=%s",(expense.id,))
     conn.commit()
     conn.close()
     return {"message": "expense deleted"}
+
