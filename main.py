@@ -82,16 +82,21 @@ def add_expense(expense: Expense):
 
 @app.put("/expenses/{id}")
 
-def update_expenses(id:int,expense:ExpenseUpdate):
+@app.put("/expenses/{id}")
+def update_expenses(id: int, expense: ExpenseUpdate):
     conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
-    cursor= conn.cursor()
-    cursor.execute("UPDATE expenses SET amount=%s WHERE id=%s ",(expense.amount,id))
-    if cursor.rowcount == 0: 
-        conn.close()                   # nothing was deleted → didn't exist
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE expenses SET amount=%s WHERE id=%s RETURNING id, description, amount",
+        (expense.amount, id)
+    )
+    row = cursor.fetchone()          # the actual updated row from the DB
+    if row is None:                  # nothing matched → didn't exist
+        conn.close()
         raise HTTPException(status_code=404, detail="Expense not found")
     conn.commit()
     conn.close()
-    return {"message":"updated expenses"}
+    return {"id": row[0], "description": row[1], "amount": row[2]}
 
 @app.delete("/expenses/{id}", status_code=204)
 def del_expense(id: int):
