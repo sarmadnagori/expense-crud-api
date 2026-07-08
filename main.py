@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from fastapi import HTTPException
+
 import psycopg2
 import os
 from dotenv import load_dotenv
@@ -36,13 +38,16 @@ app = FastAPI()
 class Expense(BaseModel):
     description:str
     amount:int
-    id:int|None=None
+
 
    
 
 class ExpenseUpdate(BaseModel):    # for UPDATING — needs id
     id: int
     amount: int
+
+class ExpenseDelete(BaseModel):
+    id: int
 
 
 
@@ -75,22 +80,29 @@ def add_expense(expense: Expense):
     conn.close()
     return {"message": "Expense added"}
 
-@app.put("/expenses")
+@app.put("/expenses/{id}")
 
-def update_expenses(expense:ExpenseUpdate):
+def update_expenses(id:int,expense:ExpenseUpdate):
     conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor= conn.cursor()
-    cursor.execute("UPDATE expenses SET amount=%s WHERE id=%s ",(expense.amount,expense.id))
+    cursor.execute("UPDATE expenses SET amount=%s WHERE id=%s ",(expense.amount,id))
+    if cursor.rowcount == 0: 
+        conn.close()                   # nothing was deleted → didn't exist
+        raise HTTPException(status_code=404, detail="Expense not found")
     conn.commit()
     conn.close()
     return {"message":"updated expenses"}
 
-@app.delete("/expenses")
-def del_expenses(expense:ExpenseUpdate):
+@app.delete("/expenses/{id}", status_code=204)
+def del_expense(id: int):
     conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
-    cursor=conn.cursor()
-    cursor.execute("DELETE FROM expenses WHERE id=%s",(expense.id,))
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM expenses WHERE id=%s", (id,))
+    if cursor.rowcount == 0:  
+        conn.close()                  # nothing was deleted → didn't exist
+        raise HTTPException(status_code=404, detail="Expense not found")
     conn.commit()
     conn.close()
-    return {"message": "expense deleted"}
+  
+    
 
