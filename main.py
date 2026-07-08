@@ -68,7 +68,7 @@ def get_expenses():
 
 
 
-@app.post("/expenses")
+@app.post("/expenses",status_code=201)
 def add_expense(expense: Expense):
     conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor = conn.cursor()
