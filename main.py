@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+from pydantic import BaseModel,Field
 from fastapi import HTTPException
 
 import psycopg2
@@ -36,14 +36,14 @@ conn.close()
 app = FastAPI()
 
 class Expense(BaseModel):
-    description:str
-    amount:int
+    description:str = Field(min_length=1)
+    amount:int = Field(gt=0)
 
 
    
 
 class ExpenseUpdate(BaseModel):    # for UPDATING — needs id
-    id: int
+    
     amount: int
 
 class ExpenseDelete(BaseModel):
@@ -51,36 +51,32 @@ class ExpenseDelete(BaseModel):
 
 
 
-@app.get ("/expenses")
-def get_expenses():
-
+@app.get("/expenses/{id}")
+def get_expense(id: int):
     conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM expenses")
-    
-    rows=cursor.fetchall()
-    expenses = []
-    for row in rows:
-        expenses.append({"id": row[0], "description": row[1], "amount": row[2]})
-       
+    cursor.execute("SELECT id, description, amount FROM expenses WHERE id=%s", (id,))
+    row = cursor.fetchone()
     conn.close()
-    return {"expenses": expenses}
+    if row is None:
+        raise HTTPException(status_code=404, detail="Expense not found")
+    return {"id": row[0], "description": row[1], "amount": row[2]}
 
 
 
-@app.post("/expenses",status_code=201)
+@app.post("/expenses", status_code=201)
 def add_expense(expense: Expense):
     conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, host=DB_HOST)
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO expenses (description, amount) VALUES (%s, %s)",
+        "INSERT INTO expenses (description, amount) VALUES (%s, %s) RETURNING id",
         (expense.description, expense.amount)
     )
-    conn.commit()      # save the INSERT
+    new_id = cursor.fetchone()[0]        # grab the id the database generated
+    conn.commit()
     conn.close()
-    return {"message": "Expense added"}
+    return {"id": new_id, "description": expense.description, "amount": expense.amount}
 
-@app.put("/expenses/{id}")
 
 @app.put("/expenses/{id}")
 def update_expenses(id: int, expense: ExpenseUpdate):
